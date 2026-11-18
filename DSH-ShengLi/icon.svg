@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="鲸鱼娘生理拓展">
+  <defs>
+    <linearGradient id="wu-line" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3ee8ff"/>
+      <stop offset="0.55" stop-color="#7a5cff"/>
+      <stop offset="1" stop-color="#ff6fd8"/>
+    </linearGradient>
+    <radialGradient id="wu-glow" cx="0.5" cy="0.42" r="0.62">
+      <stop offset="0" stop-color="#7a5cff" stop-opacity="0.62"/>
+      <stop offset="0.68" stop-color="#2a1d6b" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#0a0f2b" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="17" fill="#0a0e2a"/>
+  <rect x="4" y="4" width="56" height="56" rx="17" fill="url(#wu-glow)"/>
+  <path d="M32 13.5c-6.4 0-9.6 4.2-9.6 9.4 0 3.1 1.1 5.5 3.2 7.4l-4.2 4.1c3.1 4.2 6.4 6.3 10.6 6.3s7.5-2.1 10.6-6.3l-4.2-4.1c2.1-1.9 3.2-4.3 3.2-7.4 0-5.2-3.2-9.4-9.6-9.4z"
+        fill="none" stroke="url(#wu-line)" stroke-width="2.4" stroke-linejoin="round"/>
+  <circle cx="32" cy="23" r="3.2" fill="#3ee8ff" opacity="0.92"/>
+  <circle cx="32" cy="23" r="6.2" fill="none" stroke="#3ee8ff" stroke-width="0.9" opacity="0.42"/>
+  <path d="M28.4 40.2c1.5 3 3.2 5.4 3.6 7.8 0.4-2.4 2.1-4.8 3.6-7.8"
+        fill="none" stroke="url(#wu-line)" stroke-width="2" stroke-linecap="round" opacity="0.9"/>
+  <path d="M18.6 21.4c-2.8-1.5-5.4 1.1-4.7 3.9.5 2.6 3.5 3.2 5.2 1.9"
+        fill="none" stroke="#3ee8ff" stroke-width="1.7" stroke-linecap="round" opacity="0.72"/>
+  <path d="M45.4 21.4c2.8-1.5 5.4 1.1 4.7 3.9-.5 2.6-3.5 3.2-5.2 1.9"
+        fill="none" stroke="#ff6fd8" stroke-width="1.7" stroke-linecap="round" opacity="0.72"/>
+  <circle cx="15.4" cy="26.2" r="2.6" fill="#b06bff" opacity="0.82"/>
+  <circle cx="48.6" cy="26.2" r="2.6" fill="#ff6fd8" opacity="0.82"/>
+</svg>
