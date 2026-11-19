@@ -28,16 +28,33 @@
 
 ## 界面
 
-> 下面两张是 **0.1.0 时期**的界面存档,1.2.0 中心已经换成动态横截面图(欢迎补一张新截图发 PR)。
-
 <p align="center">
-  <img src="docs/xiaoguo.jpg" alt="0.1.0 界面" width="780">
+  <img src="docs/ui-overview.png" alt="状态总览:动态横截面 + 核心状态参数 + 近期事件" width="880">
 </p>
 <p align="center">
-  <img src="docs/xiaoguo1.jpg" alt="0.1.0 界面 2" width="780">
+  <em>状态总览——中间那张横截面会跟着储量呼吸,液面、波纹、气泡都在动;下面六格核心参数,右边近期事件。</em>
 </p>
 
-> 这张是当初在群里看到的"次元子宫"截图,**不是本插件**,谁找到源仓库记得发我:
+<p align="center">
+  <img src="docs/ui-settings.png" alt="设置页:语音响应、转化与吸收、高潮判定" width="880">
+</p>
+<p align="center">
+  <em>设置页——语音情感参数实时预览、全部转化公式可调、一键恢复初始数据。</em>
+</p>
+
+<details>
+<summary>0.1.0 时期的界面存档(点开)</summary>
+
+<p align="center">
+  <img src="docs/xiaoguo.jpg" alt="0.1.0 界面" width="720">
+</p>
+<p align="center">
+  <img src="docs/xiaoguo1.jpg" alt="0.1.0 界面 2" width="720">
+</p>
+
+</details>
+
+> 下面这张是当初在群里看到的"次元子宫"截图,**不是本插件**,谁找到源仓库记得发我:
 
 <p align="center">
   <img src="docs/原插件参考（谁找到了发我）.jpg" alt="原插件参考" width="520">

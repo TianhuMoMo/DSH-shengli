@@ -15,6 +15,7 @@
 - 事件库扩到 20 种姿势 × 2 条描述。
 - 状态文件改为 `data/state.json`(不入库),另加 `data/boot.json` 启动诊断。
 - 许可证沿用 GPL-3.0。
+- README 换用 1.2.0 实际界面截图(`docs/ui-overview.png`、`docs/ui-settings.png`),0.1.0 截图折叠存档。
 
 ## 0.1.0
 
