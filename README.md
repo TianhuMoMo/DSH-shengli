@@ -1,4 +1,4 @@
-<h1 align="center">DeepSeek Harness 鲸鱼娘生理系统拓展 · DSH-ShengLi</h1>
+<h1 align="center">DeepSeek Harness 鲸鱼娘子宫拓展 · DSH-ShengLi</h1>
 
 <p align="center"><strong>Version 1.2.0</strong></p>
 
