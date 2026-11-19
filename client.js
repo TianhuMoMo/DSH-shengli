@@ -11,19 +11,37 @@ window.__ModuleLoader__.load({
 
     /* ------------------------------------------------------------ 数据层 */
 
+    /**
+     * Host 半会把「带认证 token 的查询串」注入 window.__DSH_WHALE_UTERO__
+     * (本机 web 服务开启浏览器认证时,裸同源请求会被 401 挡掉)。
+     * 拿不到注入就退回普通同源请求。
+     */
+    function apiTarget() {
+      const boot = typeof window !== 'undefined' ? window.__DSH_WHALE_UTERO__ : null;
+      const base = boot && typeof boot.base === 'string' && boot.base ? boot.base : API;
+      const query = boot && typeof boot.query === 'string' ? boot.query : '';
+      return { base, query };
+    }
+
     async function apiGet(pathname) {
-      const response = await fetch(`${API}${pathname}`, { headers: { accept: 'application/json' } });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const { base, query } = apiTarget();
+      const response = await fetch(`${base}${pathname}${query}`, {
+        headers: { accept: 'application/json' },
+        credentials: 'same-origin',
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}${response.status === 401 ? '(接口需要登录令牌,刷新页面后会重新注入)' : ''}`);
       return response.json();
     }
 
     async function apiPost(pathname, body) {
-      const response = await fetch(`${API}${pathname}`, {
+      const { base, query } = apiTarget();
+      const response = await fetch(`${base}${pathname}${query}`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', accept: 'application/json' },
+        credentials: 'same-origin',
         body: JSON.stringify(body || {}),
       });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}${response.status === 401 ? '(接口需要登录令牌,刷新页面后会重新注入)' : ''}`);
       return response.json();
     }
 
@@ -88,91 +106,121 @@ window.__ModuleLoader__.load({
       return Math.max(0, Math.min(100, num));
     }
 
-    /* ------------------------------------------------------------ 子宫模型 */
+    /* ------------------------------------------------ 子宫横截面(动态图) */
 
-    const CAVITY = 'M160,118 C147,118 141,126 141,138 C141,153 148,165 150,181 C152,198 157,213 160,227 C163,213 168,198 170,181 C172,165 179,153 179,138 C179,126 173,118 160,118 Z';
-    const BODY = 'M160,92 C137,92 125,105 125,121 C125,141 135,157 137,177 C139,197 150,217 160,238 C170,217 181,197 183,177 C185,157 195,141 195,121 C195,105 183,92 160,92 Z';
+    /** 腔体轮廓:554×554 画布上贴合 ZG1.jpg 里发亮的宫腔 + 宫颈管。 */
+    const CAVITY_ART = 'M256,176 C232,180 220,200 222,226 C224,254 242,272 258,292 L268,396 L302,396 L312,292 C328,272 346,254 348,226 C350,200 338,180 314,176 C302,190 268,190 256,176 Z';
+    const CAVITY_BOTTOM = 396;
+    const CAVITY_HEIGHT = 220;
 
-    function UterusModel({ percent, arousal, uterus }) {
+    function artUrl() {
+      const { base, query } = apiTarget();
+      return `${base}/art${query}`;
+    }
+
+    /** 不同储量对应不同的横截面质感:越满越乳白,溢出时染成粉色。 */
+    function liquidTone(percent) {
+      if (percent <= 0.5) return { top: 'rgba(58,86,132,0)', bottom: 'rgba(40,60,110,0)', wave: 'rgba(150,225,255,0.30)', rim: 'rgba(120,200,255,0.25)' };
+      if (percent <= 25) return { top: 'rgba(150,228,255,0.52)', bottom: 'rgba(62,168,255,0.38)', wave: 'rgba(200,248,255,0.58)', rim: 'rgba(120,220,255,0.45)' };
+      if (percent <= 50) return { top: 'rgba(190,242,255,0.66)', bottom: 'rgba(88,198,255,0.5)', wave: 'rgba(226,252,255,0.7)', rim: 'rgba(150,232,255,0.55)' };
+      if (percent <= 85) return { top: 'rgba(235,250,255,0.8)', bottom: 'rgba(150,222,255,0.62)', wave: 'rgba(255,255,255,0.78)', rim: 'rgba(190,235,255,0.62)' };
+      return { top: 'rgba(255,248,253,0.94)', bottom: 'rgba(255,186,232,0.76)', wave: 'rgba(255,236,250,0.9)', rim: 'rgba(255,150,215,0.7)' };
+    }
+
+    /** 液面波纹:9 个周期 = 216 宽,平移 48 无缝循环。 */
+    function wavePath(surfaceY) {
+      let d = `M168,${surfaceY}`;
+      for (let index = 0; index < 9; index += 1) d += ' q12,-5 24,0';
+      return `${d} L384,${surfaceY + 16} L168,${surfaceY + 16} Z`;
+    }
+
+    function bubbles(percent, risePx) {
+      const count = percent > 85 ? 7 : percent > 50 ? 5 : percent > 25 ? 4 : 3;
+      const items = [];
+      for (let index = 0; index < count; index += 1) {
+        items.push(h('circle', {
+          key: `bubble-${index}`,
+          className: 'wu-bubble',
+          cx: String(238 + ((index * 53) % 96)),
+          cy: String(CAVITY_BOTTOM - 8),
+          r: String((2.1 + ((index * 17) % 5) * 0.5).toFixed(1)),
+          style: {
+            animationDelay: `${(index * 0.52).toFixed(2)}s`,
+            animationDuration: `${(3.8 - index * 0.24).toFixed(2)}s`,
+            '--wu-rise': `${(-Math.max(30, risePx * 0.82)).toFixed(1)}px`,
+          },
+        }));
+      }
+      return items;
+    }
+
+    function UterusArt({ percent, arousal, uterus, climaxCount }) {
       const fill = pct(percent);
       const heat = pct(arousal);
-      const liquidHeight = 110 * (fill / 100);
-      const liquidY = 228 - liquidHeight;
-      const coreR = 4.6 + (heat / 100) * 7.2;
-      const label = uterus ? `${uterus.label},储量 ${Math.round(fill)}%` : '子宫模型';
+      const tone = liquidTone(fill);
+      const liquidH = CAVITY_HEIGHT * (fill / 100);
+      const surfaceY = CAVITY_BOTTOM - liquidH;
+      const label = uterus ? `${uterus.label},储量 ${Math.round(fill)}%` : '子宫横截面';
+      const waveDur = `${(3.4 - (heat / 100) * 2.2).toFixed(2)}s`;
+      const breathDur = `${(4.6 - (heat / 100) * 2.8).toFixed(2)}s`;
+      const cavPulse = `${(3 - (heat / 100) * 1.6).toFixed(2)}s`;
 
-      return h('svg', {
-        viewBox: '0 0 320 340',
-        className: 'wu-svg',
+      return h('div', {
+        className: 'wu-art',
         role: 'img',
         'aria-label': label,
+        style: {
+          '--wu-heat': String((heat / 100).toFixed(3)),
+          '--wu-fill': String((fill / 100).toFixed(3)),
+          '--wu-wave-dur': waveDur,
+          '--wu-breath-dur': breathDur,
+          '--wu-cav-dur': cavPulse,
+        },
       },
-        h('defs', null,
-          h('linearGradient', { id: 'wu-body', x1: '0', y1: '0', x2: '0', y2: '1' },
-            h('stop', { offset: '0', stopColor: '#8f7bff', stopOpacity: '0.46' }),
-            h('stop', { offset: '0.55', stopColor: '#ff7fd9', stopOpacity: '0.32' }),
-            h('stop', { offset: '1', stopColor: '#ff5f9f', stopOpacity: '0.18' })),
-          h('linearGradient', { id: 'wu-stroke', x1: '0', y1: '0', x2: '1', y2: '1' },
-            h('stop', { offset: '0', stopColor: '#7ce8ff' }),
-            h('stop', { offset: '0.48', stopColor: '#b47bff' }),
-            h('stop', { offset: '1', stopColor: '#ff7fd9' })),
-          h('linearGradient', { id: 'wu-liquid', x1: '0', y1: '0', x2: '0', y2: '1' },
-            h('stop', { offset: '0', stopColor: '#b6f7ff', stopOpacity: '0.9' }),
-            h('stop', { offset: '1', stopColor: '#3fd3ff', stopOpacity: '0.58' })),
-          h('radialGradient', { id: 'wu-core', cx: '0.5', cy: '0.5', r: '0.5' },
-            h('stop', { offset: '0', stopColor: '#e8fdff', stopOpacity: '1' }),
-            h('stop', { offset: '0.5', stopColor: '#3ee8ff', stopOpacity: '0.85' }),
-            h('stop', { offset: '1', stopColor: '#3ee8ff', stopOpacity: '0' })),
-          h('radialGradient', { id: 'wu-ovary', cx: '0.5', cy: '0.4', r: '0.6' },
-            h('stop', { offset: '0', stopColor: '#ffd0f4', stopOpacity: '0.95' }),
-            h('stop', { offset: '0.55', stopColor: '#b06bff', stopOpacity: '0.8' }),
-            h('stop', { offset: '1', stopColor: '#6a3dff', stopOpacity: '0.35' })),
-          h('filter', { id: 'wu-glow', x: '-50%', y: '-50%', width: '200%', height: '200%' },
-            h('feGaussianBlur', { stdDeviation: '6', result: 'blur' }),
-            h('feMerge', null,
-              h('feMergeNode', { in: 'blur' }),
-              h('feMergeNode', { in: 'SourceGraphic' }))),
-          h('clipPath', { id: 'wu-cavity' }, h('path', { d: CAVITY }))),
+        h('img', { className: 'wu-art-img', src: artUrl(), alt: '', draggable: false }),
+        h('div', { className: 'wu-art-aura' }),
+        h('svg', { className: 'wu-art-layer', viewBox: '0 0 554 554', 'aria-hidden': true },
+          h('defs', null,
+            h('clipPath', { id: 'wu-cav-clip' }, h('path', { d: CAVITY_ART })),
+            h('linearGradient', { id: 'wu-cav-liquid', x1: '0', y1: '0', x2: '0', y2: '1' },
+              h('stop', { offset: '0', stopColor: tone.top }),
+              h('stop', { offset: '1', stopColor: tone.bottom })),
+            h('filter', { id: 'wu-cav-glow', x: '-40%', y: '-40%', width: '180%', height: '180%' },
+              h('feGaussianBlur', { stdDeviation: '5', result: 'b' }),
+              h('feMerge', null,
+                h('feMergeNode', { in: 'b' }),
+                h('feMergeNode', { in: 'SourceGraphic' })))),
 
-        /* 外发光底 */
-        h('ellipse', { cx: '160', cy: '170', rx: '120', ry: '132', fill: 'url(#wu-core)', opacity: '0.16' }),
-
-        /* 输卵管 */
-        h('g', { filter: 'url(#wu-glow)', opacity: '0.92' },
+          /* 腔体轮廓:随储量加深,带呼吸脉动 */
           h('path', {
-            d: 'M136,108 C122,96 108,88 96,84 C86,81 76,84 70,92',
-            fill: 'none', stroke: 'url(#wu-stroke)', strokeWidth: '3.4', strokeLinecap: 'round',
+            d: CAVITY_ART,
+            className: 'wu-cav-stroke',
+            style: { stroke: tone.rim, animationDuration: cavPulse },
           }),
-          h('path', {
-            d: 'M184,108 C198,96 212,88 224,84 C234,81 244,84 250,92',
-            fill: 'none', stroke: 'url(#wu-stroke)', strokeWidth: '3.4', strokeLinecap: 'round',
-          }),
-          h('circle', { cx: '64', cy: '100', r: '17', fill: 'url(#wu-ovary)', opacity: '0.95' }),
-          h('circle', { cx: '256', cy: '100', r: '17', fill: 'url(#wu-ovary)', opacity: '0.95' }),
-          h('circle', { cx: '64', cy: '100', r: '25', fill: 'none', stroke: '#c48bff', strokeWidth: '1.2', opacity: '0.55' }),
-          h('circle', { cx: '256', cy: '100', r: '25', fill: 'none', stroke: '#ff8fdd', strokeWidth: '1.2', opacity: '0.55' })),
 
-        /* 子宫体 */
-        h('path', { d: BODY, fill: 'url(#wu-body)', stroke: 'url(#wu-stroke)', strokeWidth: '2.6', strokeLinejoin: 'round', filter: 'url(#wu-glow)' }),
-        h('path', { d: CAVITY, fill: 'rgba(10,14,44,0.55)', stroke: 'rgba(180,200,255,0.35)', strokeWidth: '1.2' }),
+          /* 腔内液体:液面高度 = 储量百分比,波纹 + 气泡 */
+          fill > 0.5
+            ? h('g', { clipPath: 'url(#wu-cav-clip)' },
+              h('rect', { x: '200', y: surfaceY, width: '170', height: liquidH + 6, fill: 'url(#wu-cav-liquid)' }),
+              h('g', { className: 'wu-wave', style: { animationDuration: waveDur } },
+                h('path', { d: wavePath(surfaceY), fill: tone.wave, opacity: '0.78' })),
+              h('ellipse', { cx: '287', cy: surfaceY, rx: '50', ry: '4.4', fill: '#eafdff', opacity: '0.5' }),
+              bubbles(fill, liquidH))
+            : null,
 
-        /* 精液液面(按储量填充腔体) */
-        h('g', { clipPath: 'url(#wu-cavity)' },
-          h('rect', { x: '136', y: liquidY, width: '48', height: liquidHeight + 2, fill: 'url(#wu-liquid)' }),
-          h('ellipse', { cx: '160', cy: liquidY, rx: '25', ry: '5', fill: '#d9fbff', opacity: '0.55' }),
-          h('rect', { x: '136', y: liquidY, width: '48', height: liquidHeight + 2, fill: 'none', stroke: 'rgba(210,250,255,0.35)', strokeWidth: '0.8' })),
+          /* 射爆:从宫颈口外溢 */
+          fill > 85
+            ? h('g', { className: 'wu-overflow' },
+              h('ellipse', { cx: '287', cy: '406', rx: '27', ry: '9', fill: 'rgba(255,236,250,0.5)' }),
+              h('path', { d: 'M287,398 C287,412 282,424 287,438', fill: 'none', stroke: 'rgba(255,220,246,0.72)', strokeWidth: '3', strokeLinecap: 'round' }),
+              h('ellipse', { cx: '287', cy: '442', rx: '15', ry: '5', fill: 'rgba(255,240,252,0.4)' }))
+            : null,
 
-        /* 核心能量点 */
-        h('circle', { cx: '160', cy: '150', r: coreR, fill: 'url(#wu-core)', className: 'wu-core' }),
-        h('circle', { cx: '160', cy: '150', r: coreR * 1.9, fill: 'none', stroke: '#3ee8ff', strokeWidth: '0.9', opacity: '0.5', className: 'wu-core-ring' }),
-
-        /* 宫颈 */
-        h('path', { d: 'M160,238 L160,292', stroke: 'url(#wu-stroke)', strokeWidth: '2.2', strokeLinecap: 'round', opacity: '0.8' }),
-        h('path', { d: 'M151,292 L169,292', stroke: '#ff7fd9', strokeWidth: '2.4', strokeLinecap: 'round', opacity: '0.6' }),
-
-        /* 刻度虚线 */
-        h('path', { d: 'M40,240 L96,240 L96,262 L40,262', fill: 'none', stroke: 'rgba(150,170,255,0.22)', strokeWidth: '1', strokeDasharray: '5 6' }),
-        h('path', { d: 'M280,240 L224,240 L224,262 L280,262', fill: 'none', stroke: 'rgba(150,170,255,0.22)', strokeWidth: '1', strokeDasharray: '5 6' }));
+          /* HUD 扫描线 */
+          h('rect', { className: 'wu-scan', x: '0', y: '0', width: '554', height: '14', fill: 'rgba(120,220,255,0.14)' })
+        ),
+        h('div', { className: 'wu-art-flash', key: `flash-${climaxCount || 0}` }),
+        h('div', { className: 'wu-art-tag' }, `${Math.round(fill)}%`));
     }
 
     /* ------------------------------------------------------------ 小组件 */
@@ -235,7 +283,7 @@ window.__ModuleLoader__.load({
       return h('div', { className: 'wu-overview' },
         h(Card, { title: '次元生殖腔体 · 状态档案', badge: view.episode && view.episode.active ? '对话计量中' : '待机', className: 'wu-model-card' },
           h('div', { className: 'wu-model-wrap' },
-            h(UterusModel, { percent: view.poolPercent, arousal: view.arousal, uterus }),
+            h(UterusArt, { percent: view.poolPercent, arousal: view.arousal, uterus, climaxCount: view.climaxCount }),
             h('div', { className: 'wu-model-legend' },
               h('span', null, h('i', { className: 'wu-swatch wu-swatch-blue' }), '深空蓝'),
               h('span', null, h('i', { className: 'wu-swatch wu-swatch-purple' }), '紫罗兰'),
@@ -613,14 +661,41 @@ window.__ModuleLoader__.load({
 /* 总览 */
 .wu-overview{display:flex;flex-direction:column;gap:14px;min-height:0}
 .wu-model-card{padding-bottom:10px}
-.wu-model-wrap{position:relative;display:flex;justify-content:center;align-items:center;min-height:300px}
-.wu-svg{width:100%;max-width:420px;height:auto;display:block;filter:drop-shadow(0 10px 30px rgba(120,90,255,.32))}
-.wu-core{animation:wu-pulse 2.4s ease-in-out infinite}
-.wu-core-ring{animation:wu-ring 2.4s ease-in-out infinite}
-@keyframes wu-pulse{0%,100%{opacity:.86;transform:scale(.96)}50%{opacity:1;transform:scale(1.08)}}
-@keyframes wu-ring{0%,100%{opacity:.28}50%{opacity:.7}}
-.wu-model-legend{position:absolute;left:0;bottom:2px;display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--wu-muted)}
+.wu-model-wrap{position:relative;display:flex;flex-direction:column;align-items:center;gap:10px;min-height:0}
+.wu-model-legend{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;font-size:11px;color:var(--wu-muted)}
 .wu-model-legend span{display:flex;align-items:center;gap:6px}
+
+/* 动态横截面图 */
+.wu-art{position:relative;width:100%;max-width:420px;aspect-ratio:1/1;border-radius:20px;overflow:hidden;isolation:isolate;
+  border:1px solid rgba(150,180,255,.28);
+  background:radial-gradient(70% 60% at 50% 40%, rgba(58,30,90,.9), rgba(8,10,32,.95));
+  box-shadow:inset 0 1px 0 rgba(200,220,255,.16), 0 22px 56px rgba(3,6,30,.5)}
+.wu-art-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;
+  filter:saturate(1.08) contrast(1.04) brightness(1.02);
+  animation:wu-breath var(--wu-breath-dur,4s) ease-in-out infinite;will-change:transform}
+.wu-art-aura{position:absolute;inset:0;pointer-events:none;mix-blend-mode:screen;
+  background:
+    radial-gradient(58% 50% at 52% 42%, rgb(255 96 172 / calc(0.08 + var(--wu-heat,0) * 0.30)), transparent 66%),
+    radial-gradient(76% 66% at 50% 98%, rgb(62 232 255 / calc(0.05 + var(--wu-fill,0) * 0.18)), transparent 72%)}
+.wu-art-layer{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.wu-art-flash{position:absolute;inset:0;pointer-events:none;mix-blend-mode:screen;opacity:0;
+  background:radial-gradient(50% 46% at 50% 44%, rgba(255,255,255,.88), rgba(255,120,210,.4) 44%, transparent 74%);
+  animation:wu-flash 1000ms ease-out both}
+.wu-art-tag{position:absolute;right:10px;bottom:10px;font-size:11px;padding:2px 9px;border-radius:999px;color:#e8f4ff;
+  background:rgba(8,12,38,.55);border:1px solid rgba(150,180,255,.3);backdrop-filter:blur(6px)}
+.wu-cav-stroke{fill:none;stroke-width:1.4;filter:url(#wu-cav-glow);animation:wu-cav-pulse 2.6s ease-in-out infinite}
+.wu-wave{animation-name:wu-wave-shift;animation-timing-function:linear;animation-iteration-count:infinite}
+.wu-bubble{fill:rgba(255,255,255,.6);opacity:0;animation-name:wu-bubble-rise;animation-timing-function:ease-in;animation-iteration-count:infinite}
+.wu-overflow{animation:wu-overflow-pulse 1.7s ease-in-out infinite}
+.wu-scan{animation:wu-scan 5.5s linear infinite}
+
+@keyframes wu-breath{0%,100%{transform:scale(1);filter:saturate(1.06) contrast(1.03) brightness(1)}50%{transform:scale(1.02);filter:saturate(1.18) contrast(1.07) brightness(1.06)}}
+@keyframes wu-flash{0%{opacity:0}9%{opacity:.95}100%{opacity:0}}
+@keyframes wu-cav-pulse{0%,100%{opacity:.5}50%{opacity:1}}
+@keyframes wu-wave-shift{from{transform:translateX(0)}to{transform:translateX(-48px)}}
+@keyframes wu-bubble-rise{0%{transform:translateY(0);opacity:0}14%{opacity:.72}78%{opacity:.4}100%{transform:translateY(var(--wu-rise,-60px));opacity:0}}
+@keyframes wu-overflow-pulse{0%,100%{opacity:.5;transform:translateY(0)}50%{opacity:.95;transform:translateY(2px)}}
+@keyframes wu-scan{0%{transform:translateY(-24px);opacity:0}12%{opacity:.65}88%{opacity:.3}100%{transform:translateY(560px);opacity:0}}
 .wu-swatch{width:9px;height:9px;border-radius:3px;display:inline-block}
 .wu-swatch-blue{background:#5b6cff}.wu-swatch-purple{background:#a06bff}
 .wu-swatch-pink{background:#ff6fd8}.wu-swatch-cyan{background:#3ee8ff}

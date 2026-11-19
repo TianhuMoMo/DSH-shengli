@@ -1,0 +1,25 @@
+name: check
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  syntax-and-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 语法检查
+        run: |
+          node --check index.js
+          node --check client.js
+          node --check lib/state.js
+
+      - name: 状态机测试
+        run: node test/state.test.mjs

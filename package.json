@@ -1,0 +1,52 @@
+{
+  "name": "dsh-whale-utero",
+  "version": "1.2.0",
+  "private": true,
+  "type": "module",
+  "description": "DSH 鲸鱼娘生理系统拓展 · A bio-status panel for the DeepSeek Harness web GUI: acrylic page, animated womb cross-section, token-driven fluid reserve, arousal/repression model, event log and voice emotion parameters.",
+  "license": "GPL-3.0-only",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "dsh-bundle",
+    "panel",
+    "sidebar",
+    "roleplay"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TianhuMoMo/DSH-shengli.git"
+  },
+  "homepage": "https://github.com/TianhuMoMo/DSH-shengli#readme",
+  "bugs": {
+    "url": "https://github.com/TianhuMoMo/DSH-shengli/issues"
+  },
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "lib/*.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "ZG1.jpg"
+  ],
+  "scripts": {
+    "check": "node --check index.js && node --check client.js && node --check lib/state.js",
+    "test": "node test/state.test.mjs"
+  },
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  }
+}

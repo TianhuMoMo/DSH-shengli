@@ -25,6 +25,7 @@ import {
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(HERE, 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
+const ART_FILE = path.join(HERE, 'ZG1.jpg');
 const API_ROOT = '/api/whale-utero';
 
 const TICK_MS = 5000;
@@ -164,12 +165,6 @@ export function apply(ctx) {
 
   /* ---------------- HTTP 路由 ---------------- */
 
-  const webServer = ctx.get('webServer');
-  if (!webServer || typeof webServer.register !== 'function') {
-    ctx.logger?.warn?.('[whale-utero] 没有 webServer 服务,页面数据接口未注册');
-    return;
-  }
-
   const views = () => {
     const at = Date.now();
     pump(at);
@@ -177,6 +172,30 @@ export function apply(ctx) {
   };
 
   const routes = [
+    {
+      kind: 'exact',
+      path: `${API_ROOT}/art`,
+      handler: (req, res) => {
+        let data;
+        try {
+          data = fs.readFileSync(ART_FILE);
+        } catch {
+          res.statusCode = 404;
+          res.setHeader('content-type', 'text/plain; charset=utf-8');
+          res.end('art-not-found');
+          return;
+        }
+        res.statusCode = 200;
+        res.setHeader('content-type', 'image/jpeg');
+        res.setHeader('cache-control', 'public, max-age=60');
+        res.setHeader('content-length', String(data.length));
+        if (req.method === 'HEAD') {
+          res.end();
+          return;
+        }
+        res.end(data);
+      },
+    },
     {
       kind: 'exact',
       path: `${API_ROOT}/state`,
@@ -268,16 +287,127 @@ export function apply(ctx) {
     },
   ];
 
-  ctx.effect(() => {
-    const disposers = routes.map((route) => webServer.register(route));
-    return () => {
-      for (const dispose of disposers) {
-        try {
-          dispose();
-        } catch {
-          /* 路由已随宿主卸载 */
+  /* ---------------- 注册 / 诊断 / 页面注入 ---------------- */
+
+  const bootLog = [];
+
+  const writeBoot = (entry) => {
+    bootLog.push({ at: Date.now(), ...entry });
+    if (bootLog.length > 24) bootLog.splice(0, bootLog.length - 24);
+    try {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(
+        path.join(DATA_DIR, 'boot.json'),
+        JSON.stringify({ plugin: 'dsh-whale-utero', entries: bootLog }, null, 2),
+        'utf8',
+      );
+    } catch {
+      /* 诊断文件写不进去不影响主功能 */
+    }
+  };
+
+  const resolveApiInfo = () => {
+    const info = { base: API_ROOT, origin: '', query: '', tokenized: '' };
+    let ws;
+    try {
+      ws = ctx.get('webServer');
+    } catch {
+      ws = undefined;
+    }
+    try {
+      if (ws && typeof ws.getOrigin === 'function') info.origin = ws.getOrigin();
+    } catch {
+      info.origin = '';
+    }
+    if (!info.origin) return info;
+    try {
+      const connection = ctx.get('connection');
+      if (!connection || typeof connection.authenticatedUrl !== 'function') return info;
+      const tokenized = connection.authenticatedUrl(`${info.origin}${API_ROOT}`);
+      if (!tokenized) return info;
+      info.tokenized = tokenized;
+      info.query = new URL(tokenized).search || '';
+    } catch {
+      /* 认证不可用:退回同源无 token 请求 */
+    }
+    return info;
+  };
+
+  let routeDispose = null;
+
+  const attachRoutes = () => {
+    if (routeDispose) return;
+    let ws;
+    try {
+      ws = ctx.get('webServer');
+    } catch {
+      ws = undefined;
+    }
+    if (!ws || typeof ws.register !== 'function') {
+      writeBoot({ step: 'attach', registered: false, reason: 'webServer-not-ready' });
+      return;
+    }
+    try {
+      const disposers = routes.map((route) => ws.register(route));
+      routeDispose = () => {
+        for (const dispose of disposers) {
+          try {
+            dispose();
+          } catch {
+            /* 路由已随宿主卸载 */
+          }
         }
-      }
-    };
+      };
+      writeBoot({
+        step: 'attach',
+        registered: true,
+        routes: routes.map((route) => route.path),
+        api: resolveApiInfo(),
+      });
+    } catch (error) {
+      writeBoot({
+        step: 'attach',
+        registered: false,
+        reason: 'register-threw',
+        error: String((error && error.message) || error),
+      });
+    }
+  };
+
+  // 立即尝试;若此刻 webServer 还没就绪,等它上线再补注册(这正是上次失效的坑)
+  attachRoutes();
+  try {
+    ctx.inject(['webServer'], () => {
+      attachRoutes();
+    });
+  } catch {
+    /* 老版本没有 ctx.inject,靠定时器兜底 */
+    ctx.effect(() => {
+      const timer = setInterval(() => {
+        attachRoutes();
+        if (routeDispose) clearInterval(timer);
+      }, 2000);
+      return () => clearInterval(timer);
+    });
+  }
+
+  ctx.effect(() => () => {
+    if (routeDispose) routeDispose();
+  });
+
+  /* 把带认证 token 的查询串注入页面:浏览器同源请求需要它才不会被 401 挡掉 */
+  ctx.on('webserver/index-inject', (table) => {
+    if (!Array.isArray(table)) return;
+    try {
+      const info = resolveApiInfo();
+      const payload = { v: 1, base: API_ROOT, query: info.query || '' };
+      table.push({
+        kind: 'script',
+        placement: 'head',
+        text: `window.__DSH_WHALE_UTERO__=${JSON.stringify(payload)};`,
+      });
+    } catch {
+      /* 注入失败不影响其它插件 */
+    }
   });
 }
